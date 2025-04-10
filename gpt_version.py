@@ -1,33 +1,80 @@
-import random
-from collections import defaultdict
+import numpy as np
+import pandas as pd
 
-def allocate_population_to_bsl(block_population, bsl_units_per_bsl):
+
+def load_data(file_path):
+    """Load CSV or Stata file into a Pandas DataFrame."""
+    if file_path.endswith(".csv"):
+        df = pd.read_csv(file_path)
+    elif file_path.endswith(".dta"):
+        df = pd.read_stata(file_path)
+    else:
+        raise ValueError(
+            "Unsupported file format. Please provide a CSV or Stata (.dta) file."
+        )
+    print(df)
+    # required_cols = {"block_id", "bsl_id", "unit_count", "block_population"}
+    required_cols = {"block_id", "unit_count"}
+    if not required_cols.issubset(df.columns):
+        raise ValueError(
+            f"File is missing required columns: {required_cols - set(df.columns)}"
+        )
+    return df
+
+
+def allocate_population_blockwise(df):
     """
-    Allocate block population to Broadband Serviceable Locations (BSLs).
+    Allocate population to BSLs block-by-block using vectorized operations.
 
     Args:
-        block_population (int): Total number of people in the census block.
-        bsl_units_per_bsl (dict): Dictionary of BSL ID to number of units in that BSL.
-                                  Example: {"BSL1": 2, "BSL2": 1, "BSL3": 3} => total 6 units
+        df (pd.DataFrame): Input DataFrame with columns:
+            - block_id
+            - bsl_id
+            - unit_count
+            - block_population
 
     Returns:
-        dict: Estimated population per BSL.
+        pd.DataFrame: DataFrame with allocated population per BSL.
     """
-    # Flatten unit list with BSL IDs for random assignment
-    unit_to_bsl = []
-    for bsl_id, unit_count in bsl_units_per_bsl.items():
-        unit_to_bsl.extend([bsl_id] * unit_count)
+    allocation_results = []
 
-    total_units = len(unit_to_bsl)
-    if total_units == 0 or block_population == 0:
-        return {bsl_id: 0 for bsl_id in bsl_units_per_bsl}
+    for block_id, group in df.groupby("block_id"):
+        block_population = group["block_population"].iloc[0]
+        if block_population == 0 or group["unit_count"].sum() == 0:
+            # Skip empty blocks or return 0s
+            for _, row in group.iterrows():
+                allocation_results.append({**row, "allocated_population": 0})
+            continue
 
-    # Initialize BSL population counter
-    bsl_population = defaultdict(int)
+        # Create weighted BSL list based on unit_count
+        bsl_unit_expansion = np.repeat(
+            group["bsl_id"].values, group["unit_count"].values
+        )
 
-    # Assign each person randomly to one unit, and thus to a BSL
-    for _ in range(block_population):
-        chosen_bsl = random.choice(unit_to_bsl)
-        bsl_population[chosen_bsl] += 1
+        # Randomly assign each person to a BSL via unit
+        assigned_bsl_ids = np.random.choice(bsl_unit_expansion, size=block_population)
 
-    return dict(bsl_population)
+        # Count how many people got assigned to each BSL
+        bsl_pop_counts = pd.Series(assigned_bsl_ids).value_counts()
+
+        for _, row in group.iterrows():
+            bsl_id = row["bsl_id"]
+            allocated_pop = bsl_pop_counts.get(bsl_id, 0)
+            allocation_results.append({**row, "allocated_population": allocated_pop})
+
+    return pd.DataFrame(allocation_results)
+
+
+def main(csv_path, output_path):
+    df = load_data(csv_path)
+    result_df = allocate_population_blockwise(df)
+    result_df.to_csv(output_path, index=False)
+    print(f"✅ Population allocation complete. Output saved to {output_path}")
+
+
+if __name__ == "__main__":
+    csv_path = (
+        "data/test dataset state 56 block_id location_id unit_count round one.dta"
+    )
+    output_path = "output/allocated_output_56.csv"
+    main(csv_path, output_path)
