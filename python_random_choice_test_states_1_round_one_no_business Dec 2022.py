@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 
-locations=pd.read_stata('test dataset state 56 block_id location_id unit_count round one.dta')
+locations=pd.read_stata('data/test dataset state 56 block_id location_id unit_count round one.dta')
 
 # Compute total units per Census block
 locations['total_units'] = locations.groupby('block')['units'].transform('sum')
