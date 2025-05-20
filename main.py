@@ -53,8 +53,10 @@ def merge_dataframes(df1: pl.DataFrame, df2: pl.DataFrame) -> pl.DataFrame:
 
 if __name__ == "__main__":
     stata_path = "data/BDC Update 07.12.23 AL Dec 2022.dta"
-    sv_path = "ddata/FCC_Active_NoBSL_12312024_rel_6_test.csv"
+    csv_path = "data/FCC_Active_NoBSL_12312024_rel_6_test.csv"
     
     stata_df = load_data(stata_path)
     
+   
+
     
